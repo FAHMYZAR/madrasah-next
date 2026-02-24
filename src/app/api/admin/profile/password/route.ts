@@ -2,11 +2,11 @@ import bcrypt from "bcryptjs";
 import { connectDb } from "@/lib/db";
 import { User } from "@/lib/models/User";
 import { fail, ok } from "@/lib/response";
-import { requireAdminOrGuru } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 
 export async function PUT(req: Request) {
   try {
-    const auth = await requireAdminOrGuru();
+    const auth = await requireAdmin();
     const body = await req.json();
     await connectDb();
 

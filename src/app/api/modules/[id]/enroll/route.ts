@@ -1,16 +1,22 @@
+import { z } from "zod";
 import { connectDb } from "@/lib/db";
 import { Module } from "@/lib/models/Module";
 import { Enrollment } from "@/lib/models/Enrollment";
 import { requireAuth } from "@/lib/auth";
 import { fail, ok } from "@/lib/response";
 
+const enrollSchema = z.object({ enrollKey: z.string().optional() });
+
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireAuth();
+    if (auth.role !== "user") return fail("Forbidden", 403);
+
     await connectDb();
     const { id } = await params;
-    const body = await req.json().catch(() => ({}));
-    const enrollKey = body.enrollKey ? String(body.enrollKey).trim() : "";
+    const parsed = enrollSchema.safeParse(await req.json().catch(() => ({})));
+    if (!parsed.success) return fail("Validation failed", 422, parsed.error.flatten());
+    const enrollKey = parsed.data.enrollKey ? String(parsed.data.enrollKey).trim() : "";
 
     const mod = await Module.findById(id);
     if (!mod || !mod.isActive) return fail("Module not found", 404);

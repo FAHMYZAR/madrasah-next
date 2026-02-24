@@ -1,30 +1,29 @@
-import { connectDb } from "@/lib/db";
-import { Module } from "@/lib/models/Module";
-import { Phase } from "@/lib/models/Phase";
-import { Material } from "@/lib/models/Material";
-import { saveUpload } from "@/lib/upload";
+import { z } from "zod";
 import { requireAdminOrGuru } from "@/lib/auth";
+import { ensurePhaseAccess } from "@/lib/access";
+import { connectDb } from "@/lib/db";
+import { Material } from "@/lib/models/Material";
 import { fail, ok } from "@/lib/response";
+import { saveUpload } from "@/lib/upload";
 
-async function ensurePhaseAccess(phaseId: string, userId: string, role: string) {
-  await connectDb();
-  const phase = await Phase.findById(phaseId);
-  if (!phase) throw new Error("NOT_FOUND");
-  const mod = await Module.findById(phase.moduleId);
-  if (!mod) throw new Error("NOT_FOUND");
-  if (role === "guru" && String(mod.assignedTeacherId || mod.createdBy) !== userId) throw new Error("FORBIDDEN");
-  return { phase, mod };
-}
+const materialSchema = z.object({
+  title: z.string().trim().min(1),
+  type: z.enum(["pdf", "video", "link"]),
+  url: z.string().trim().min(1),
+  description: z.string().optional().default(""),
+  order: z.number().int().min(0).default(0),
+  isVisible: z.boolean().default(true),
+});
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireAdminOrGuru();
     const { id } = await params;
-    const { phase } = await ensurePhaseAccess(id, auth.sub, auth.role);
+    const { phase } = await ensurePhaseAccess(id, auth);
     const materials = await Material.find({ phaseId: phase._id }).sort({ order: 1, createdAt: 1 });
     return ok(materials);
   } catch (e: unknown) {
-    if (String(e).includes("FORBIDDEN")) return fail("Unauthorized", 401);
+    if (String(e).includes("FORBIDDEN") || String(e).includes("UNAUTHORIZED")) return fail("Unauthorized", 401);
     if (String(e).includes("NOT_FOUND")) return fail("Phase not found", 404);
     return fail("Failed to fetch materials", 500, { error: String(e) });
   }
@@ -34,38 +33,36 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     const auth = await requireAdminOrGuru();
     const { id } = await params;
-    const { phase } = await ensurePhaseAccess(id, auth.sub, auth.role);
+    const { phase } = await ensurePhaseAccess(id, auth);
     const ct = req.headers.get("content-type") || "";
-    let payload: Record<string, any> = { phaseId: phase._id, createdBy: auth.sub };
+
+    let raw: any = { title: "", type: "link", url: "", description: "", order: 0, isVisible: true };
 
     if (ct.includes("multipart/form-data")) {
       const form = await req.formData();
-      payload.title = String(form.get("title") || "").trim();
-      payload.type = String(form.get("type") || "");
-      payload.url = String(form.get("url") || "").trim();
-      payload.description = String(form.get("description") || "").trim();
-      payload.order = Number(form.get("order") ?? 0);
-      payload.isVisible = String(form.get("isVisible") || "true") === "true";
+      raw = {
+        title: String(form.get("title") || "").trim(),
+        type: String(form.get("type") || "link"),
+        url: String(form.get("url") || "").trim(),
+        description: String(form.get("description") || "").trim(),
+        order: Number(form.get("order") ?? 0),
+        isVisible: String(form.get("isVisible") || "true") === "true",
+      };
       const file = form.get("file") || form.get("upload") || form.get("media");
-      if (file instanceof File && file.size > 0) {
-        const saved = await saveUpload(file, "materials");
-        payload.url = saved;
-      }
+      if (file instanceof File && file.size > 0) raw.url = await saveUpload(file, "materials");
     } else {
       const body = await req.json();
-      payload.title = String(body.title || "").trim();
-      payload.type = body.type;
-      payload.url = String(body.url || "").trim();
-      payload.description = String(body.description || "").trim();
-      payload.order = Number(body.order ?? 0);
-      payload.isVisible = Boolean(body.isVisible ?? true);
+      raw = { ...body, order: Number(body.order ?? 0) };
     }
 
-    if (!payload.title || !payload.url || !["pdf", "video", "link"].includes(payload.type)) return fail("Title, url, and valid type are required", 422);
-    const material = await Material.create(payload);
+    const parsed = materialSchema.safeParse(raw);
+    if (!parsed.success) return fail("Validation failed", 422, parsed.error.flatten());
+
+    await connectDb();
+    const material = await Material.create({ phaseId: phase._id, createdBy: auth.sub, ...parsed.data });
     return ok(material, 201);
   } catch (e: unknown) {
-    if (String(e).includes("FORBIDDEN")) return fail("Unauthorized", 401);
+    if (String(e).includes("FORBIDDEN") || String(e).includes("UNAUTHORIZED")) return fail("Unauthorized", 401);
     if (String(e).includes("NOT_FOUND")) return fail("Phase not found", 404);
     return fail("Failed to create material", 422, { error: String(e) });
   }

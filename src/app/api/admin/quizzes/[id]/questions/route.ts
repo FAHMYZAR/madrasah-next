@@ -1,58 +1,54 @@
+import { z } from "zod";
+import { requireAdmin } from "@/lib/auth";
+import { ensureQuizAccess } from "@/lib/access";
 import { connectDb } from "@/lib/db";
-import { Question } from "@/lib/models/Question";
 import { AnswerOption } from "@/lib/models/AnswerOption";
-import { Quiz } from "@/lib/models/Quiz";
-import { requireAdminOrGuru } from "@/lib/auth";
+import { Question } from "@/lib/models/Question";
 import { fail, ok } from "@/lib/response";
 
-async function assertManagedQuiz(quizId: string) {
-  const auth = await requireAdminOrGuru();
-  await connectDb();
-  const quiz = await Quiz.findById(quizId).lean();
-  if (!quiz) throw new Error("NOT_FOUND");
-  if (auth.role === "guru" && String(quiz.created_by) !== auth.sub) throw new Error("FORBIDDEN");
-}
+const createQuestionSchema = z.object({
+  question_text: z.string().trim().min(1),
+  points: z.number().int().min(1).max(100).default(10),
+  question_type: z.enum(["multiple_choice", "essay"]).default("multiple_choice"),
+  answer_key_text: z.string().optional().default(""),
+  options: z.array(z.object({ option_text: z.string().trim().min(1), is_correct: z.boolean().default(false) })).optional(),
+});
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const auth = await requireAdmin();
     const { id: quizId } = await params;
-    await assertManagedQuiz(quizId);
+    await connectDb();
+    await ensureQuizAccess(quizId, auth);
+
     const body = await req.json();
-
-    const questionText = String(body.question_text || "").trim();
-    const points = Number(body.points || 10);
-    const questionType = (body.question_type || "multiple_choice") as "multiple_choice" | "essay";
-    const answerKeyText = String(body.answer_key_text || "").trim();
-
-    if (!questionText) return fail("Question text is required", 422);
-    if (points < 1 || points > 100) return fail("Points harus 1-100", 422);
-    if (!["multiple_choice", "essay"].includes(questionType)) return fail("Question type invalid", 422);
+    const parsed = createQuestionSchema.safeParse({ ...body, points: Number(body.points ?? 10) });
+    if (!parsed.success) return fail("Validation failed", 422, parsed.error.flatten());
 
     const question = await Question.create({
       quiz_id: quizId,
-      question_text: questionText,
-      question_type: questionType,
-      points,
-      answer_key_text: questionType === "essay" ? answerKeyText : "",
+      question_text: parsed.data.question_text,
+      type: parsed.data.question_type,
+      points: parsed.data.points,
+      answer_key_text: parsed.data.question_type === "essay" ? parsed.data.answer_key_text : "",
+      manual_grading_required: parsed.data.question_type === "essay" && !String(parsed.data.answer_key_text || "").trim(),
     });
 
-    if (questionType === "multiple_choice") {
-      if (!Array.isArray(body.options) || body.options.length < 2) return fail("Minimal 2 opsi", 422);
+    if (parsed.data.question_type === "multiple_choice") {
+      const options = parsed.data.options || [];
+      if (options.length < 2) return fail("Validation failed", 422, "At least 2 options are required");
+      if (!options.some((o) => o.is_correct)) return fail("Validation failed", 422, "At least 1 correct option is required");
 
-      const options = body.options
-        .filter((opt: { option_text?: string }) => String(opt.option_text || "").trim().length > 0)
-        .map((opt: { option_text: string; is_correct: boolean }) => ({
+      await AnswerOption.insertMany(
+        options.map((opt) => ({
           question_id: String(question._id),
-          option_text: String(opt.option_text).trim(),
+          option_text: opt.option_text,
           is_correct: !!opt.is_correct,
-        }));
-
-      if (options.length < 2) return fail("Minimal 2 opsi", 422);
-      if (!options.some((o: { is_correct: boolean }) => o.is_correct)) return fail("Harus ada 1 jawaban benar", 422);
-      await AnswerOption.insertMany(options);
+        }))
+      );
     }
 
-    const options = await AnswerOption.find({ question_id: String(question._id) });
+    const options = await AnswerOption.find({ question_id: String(question._id) }).lean();
     return ok({ ...question.toObject(), options }, 201);
   } catch (e: unknown) {
     if (String(e).includes("NOT_FOUND")) return fail("Quiz not found", 404);
@@ -63,15 +59,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const auth = await requireAdmin();
     const { id: quizId } = await params;
-    await assertManagedQuiz(quizId);
+    await connectDb();
+    await ensureQuizAccess(quizId, auth);
 
     const questions = await Question.find({ quiz_id: quizId }).lean();
     const questionsWithOptions = await Promise.all(
-      questions.map(async (q) => {
-        const options = await AnswerOption.find({ question_id: String(q._id) }).lean();
-        return { ...q, options };
-      })
+      questions.map(async (q) => ({ ...q, options: await AnswerOption.find({ question_id: String(q._id) }).lean() }))
     );
 
     return ok(questionsWithOptions);

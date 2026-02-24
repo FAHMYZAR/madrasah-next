@@ -40,7 +40,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     await connectDb();
-    const user = await User.findByIdAndUpdate(id, patch, { new: true }).select("nim name role className isActive profile_url");
+    const user = await User.findByIdAndUpdate(id, patch, { new: true }).select("nim name role className isActive profile_url").lean();
 
     if (!user) return fail("User not found", 404);
     return ok(user);

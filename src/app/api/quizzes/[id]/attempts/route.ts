@@ -37,7 +37,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     const { id } = await params;
     await connectDb();
 
-    if (auth.role === "admin") return fail("Admin cannot take quizzes", 403);
+    if (auth.role !== "user") return fail("Forbidden", 403);
 
     const attempt = await QuizAttempt.create({
       user_id: auth.sub,

@@ -22,6 +22,7 @@ export default function AdminModulesPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", code: "", description: "", assignedTeacherId: "", visibility: "private", enrollmentType: "manual", enrollKey: "", startDate: "", endDate: "", isActive: true });
   const [loading, setLoading] = useState(false);
+  const [mobileMenuModule, setMobileMenuModule] = useState<Module | null>(null);
 
   const load = async (page = meta.page, searchQuery = "") => {
     try {
@@ -89,7 +90,7 @@ export default function AdminModulesPage() {
               <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               <input type="text" placeholder="Search modules..." value={search} onChange={(e) => setSearch(e.target.value)} className="input-base pl-10 w-64" style={{ paddingLeft: "2.3rem" }} />
             </div>
-            <PrimaryButton onClick={() => setShowForm(true)} icon="plus">Add Module</PrimaryButton>
+            <PrimaryButton onClick={() => setShowForm(true)} icon="plus">Module</PrimaryButton>
           </div>
         </div>
 
@@ -99,9 +100,9 @@ export default function AdminModulesPage() {
               <tr>
                 <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Module</th>
                 <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Visibility</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Enrollment</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
+                <th className="hidden md:table-cell px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Enrollment</th>
+                <th className="hidden md:table-cell px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Others</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
@@ -116,14 +117,19 @@ export default function AdminModulesPage() {
                     </div>
                   </td>
                   <td className="px-5 py-4 text-sm text-gray-700">{m.visibility}</td>
-                  <td className="px-5 py-4 text-sm text-gray-700">{m.enrollmentType === "enroll_key" ? "enroll_key" : m.enrollmentType}</td>
-                  <td className="px-5 py-4">{m.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="neutral">Inactive</Badge>}</td>
-                  <td className="px-5 py-4 text-right space-x-2">
-                    <Link href={`/admin/modules/${m._id}`} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded" title="Detail">
-                      <i className="fas fa-eye" />
-                    </Link>
-                    <button onClick={() => remove(m._id)} className="p-2 text-red-600 hover:bg-red-50 rounded" title="Delete">
-                      <i className="fas fa-trash" />
+                  <td className="hidden md:table-cell px-5 py-4 text-sm text-gray-700">{m.enrollmentType === "enroll_key" ? "enroll_key" : m.enrollmentType}</td>
+                  <td className="hidden md:table-cell px-5 py-4">{m.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="neutral">Inactive</Badge>}</td>
+                  <td className="px-5 py-4 text-right">
+                    <div className="hidden md:inline-flex items-center gap-2">
+                      <Link href={`/admin/modules/${m._id}`} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded" title="Detail">
+                        <i className="fas fa-eye" />
+                      </Link>
+                      <button onClick={() => remove(m._id)} className="p-2 text-red-600 hover:bg-red-50 rounded" title="Delete">
+                        <i className="fas fa-trash" />
+                      </button>
+                    </div>
+                    <button onClick={() => setMobileMenuModule(m)} className="md:hidden p-2 text-gray-600 hover:bg-gray-100 rounded" title="Others">
+                      <i className="fas fa-ellipsis-v" />
                     </button>
                   </td>
                 </tr>
@@ -202,6 +208,36 @@ export default function AdminModulesPage() {
             <div className="flex justify-end gap-3">
               <PrimaryButton variant="secondary" onClick={() => setShowForm(false)}>Cancel</PrimaryButton>
               <PrimaryButton loading={loading} onClick={create}>Create Module</PrimaryButton>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mobileMenuModule && (
+        <div className="md:hidden fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setMobileMenuModule(null)} />
+          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-2xl shadow-2xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{mobileMenuModule.name}</p>
+                <p className="text-xs text-gray-500">Code: {mobileMenuModule.code}</p>
+              </div>
+              <button onClick={() => setMobileMenuModule(null)} className="text-gray-500"><i className="fas fa-times" /></button>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-700 space-y-1">
+              <p>Visibility: <span className="font-medium">{mobileMenuModule.visibility}</span></p>
+              <p>Enrollment: <span className="font-medium">{mobileMenuModule.enrollmentType}</span></p>
+              <p>Status: <span className="font-medium">{mobileMenuModule.isActive ? "Active" : "Inactive"}</span></p>
+            </div>
+
+            <div className="space-y-2">
+              <Link href={`/admin/modules/${mobileMenuModule._id}`} onClick={() => setMobileMenuModule(null)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700">
+                <i className="fas fa-eye" /> Detail Module
+              </Link>
+              <button onClick={() => { remove(mobileMenuModule._id); setMobileMenuModule(null); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 text-red-700">
+                <i className="fas fa-trash" /> Delete Module
+              </button>
             </div>
           </div>
         </div>

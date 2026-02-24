@@ -1,64 +1,63 @@
+import { z } from "zod";
+import { requireAdmin } from "@/lib/auth";
+import { ensureQuestionAccess } from "@/lib/access";
 import { connectDb } from "@/lib/db";
-import { Question } from "@/lib/models/Question";
 import { AnswerOption } from "@/lib/models/AnswerOption";
-import { requireAdminOrGuru } from "@/lib/auth";
+import { Question } from "@/lib/models/Question";
 import { fail, ok } from "@/lib/response";
+
+const patchQuestionSchema = z.object({
+  question_text: z.string().trim().min(1).optional(),
+  question_type: z.enum(["multiple_choice", "essay"]).optional(),
+  answer_key_text: z.string().optional(),
+  points: z.number().int().min(1).max(100).optional(),
+});
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireAdminOrGuru();
+    const auth = await requireAdmin();
     const { id } = await params;
     await connectDb();
+    await ensureQuestionAccess(id, auth);
 
     const question = await Question.findById(id);
     if (!question) return fail("Question not found", 404);
-
     const options = await AnswerOption.find({ question_id: id }).lean();
     return ok({ ...question.toObject(), options });
   } catch (e: unknown) {
-    if (String(e).includes("FORBIDDEN") || String(e).includes("UNAUTHORIZED")) {
-      return fail("Unauthorized", 401);
-    }
+    if (String(e).includes("NOT_FOUND")) return fail("Question not found", 404);
+    if (String(e).includes("FORBIDDEN") || String(e).includes("UNAUTHORIZED")) return fail("Unauthorized", 401);
     return fail("Failed to fetch question", 500, { error: String(e) });
   }
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireAdminOrGuru();
+    const auth = await requireAdmin();
     const { id } = await params;
-    const body = await req.json();
     await connectDb();
+    await ensureQuestionAccess(id, auth);
 
-    const patch: Record<string, unknown> = {};
-    if (body.question_text !== undefined) patch.question_text = String(body.question_text || "").trim();
-    if (body.question_type !== undefined) {
-      if (!["multiple_choice", "essay"].includes(String(body.question_type))) return fail("Question type invalid", 422);
-      patch.question_type = body.question_type;
-    }
-    if (body.answer_key_text !== undefined) patch.answer_key_text = String(body.answer_key_text || "").trim();
-    if (body.points !== undefined) {
-      const p = Number(body.points);
-      if (Number.isNaN(p) || p < 1 || p > 100) return fail("Points harus 1-100", 422);
-      patch.points = p;
-    }
+    const body = await req.json();
+    const parsed = patchQuestionSchema.safeParse({ ...body, points: body.points !== undefined ? Number(body.points) : undefined });
+    if (!parsed.success) return fail("Validation failed", 422, parsed.error.flatten());
 
-    const question = await Question.findByIdAndUpdate(id, patch, { new: true });
+    const question = await Question.findByIdAndUpdate(id, parsed.data, { new: true });
     if (!question) return fail("Question not found", 404);
     return ok(question);
   } catch (e: unknown) {
-    if (String(e).includes("FORBIDDEN") || String(e).includes("UNAUTHORIZED")) {
-      return fail("Unauthorized", 401);
-    }
+    if (String(e).includes("NOT_FOUND")) return fail("Question not found", 404);
+    if (String(e).includes("FORBIDDEN") || String(e).includes("UNAUTHORIZED")) return fail("Unauthorized", 401);
     return fail("Failed to update question", 422, { error: String(e) });
   }
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireAdminOrGuru();
+    const auth = await requireAdmin();
     const { id } = await params;
     await connectDb();
+    await ensureQuestionAccess(id, auth);
 
     await AnswerOption.deleteMany({ question_id: id });
     const question = await Question.findByIdAndDelete(id);
@@ -66,9 +65,8 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
 
     return ok({ message: "Question deleted successfully" });
   } catch (e: unknown) {
-    if (String(e).includes("FORBIDDEN") || String(e).includes("UNAUTHORIZED")) {
-      return fail("Unauthorized", 401);
-    }
+    if (String(e).includes("NOT_FOUND")) return fail("Question not found", 404);
+    if (String(e).includes("FORBIDDEN") || String(e).includes("UNAUTHORIZED")) return fail("Unauthorized", 401);
     return fail("Failed to delete question", 422, { error: String(e) });
   }
 }

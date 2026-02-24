@@ -8,10 +8,10 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 
-type Quiz = { _id: string; title: string; description?: string; module_id?: string; createdAt: string; questions_count?: number; status?: "draft"|"published"|"active"|"archived"; duration_minutes?: number; pass_score?: number; started_at?: string | null; ended_at?: string | null };
-type Module = { _id: string; title: string };
-type Option = { _id: string; option_text: string; is_correct?: boolean };
-type Question = { _id: string; question_text: string; options: Option[] };
+type Quiz = { _id: string; title: string; description?: string; moduleId?: string; module_id?: string; createdAt: string; questionsCount?: number; questions_count?: number; status?: "draft"|"published"|"active"|"archived"; durationMinutes?: number; duration_minutes?: number; passScore?: number; pass_score?: number; startedAt?: string | null; started_at?: string | null; endedAt?: string | null; ended_at?: string | null };
+type Module = { _id: string; name?: string; title?: string };
+type Option = { _id: string; optionText?: string; option_text?: string; isCorrect?: boolean; is_correct?: boolean };
+type Question = { _id: string; questionText?: string; question_text?: string; questionType?: string; question_type?: string; type?: string; options: Option[] };
 type Meta = { page: number; totalPages: number; total: number };
 
 export default function AdminQuizzesPage() {
@@ -31,6 +31,7 @@ export default function AdminQuizzesPage() {
   const [startedAt, setStartedAt] = useState("");
   const [endedAt, setEndedAt] = useState("");
   const [editing, setEditing] = useState<Quiz | null>(null);
+  const [mobileMenuQuiz, setMobileMenuQuiz] = useState<Quiz | null>(null);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [searchDebounce, setSearchDebounce] = useState("");
@@ -263,7 +264,7 @@ export default function AdminQuizzesPage() {
             </div>
             <select value={filterModule} onChange={(e) => setFilterModule(e.target.value)} className="input-base w-44">
               <option value="">All Modules</option>
-              {modules.map((m) => <option key={m._id} value={m._id}>{m.title}</option>)}
+              {modules.map((m) => <option key={m._id} value={m._id}>{m.name || m.title}</option>)}
             </select>
             <PrimaryButton onClick={() => { if (editing) { setEditing(null); setShowQuizForm(false); } else { setShowQuizForm((v) => !v); } }} icon={(editing || showQuizForm) ? "times" : "plus"}>{(editing || showQuizForm) ? "Cancel" : "Add Quiz"}</PrimaryButton>
           </div>
@@ -293,7 +294,7 @@ export default function AdminQuizzesPage() {
                   <label className="block text-xs font-semibold text-gray-600">Module</label>
                   <select className="input-base" value={editing ? (editing.module_id || "") : formModuleId} onChange={(e) => editing ? setEditing({ ...editing, module_id: e.target.value }) : setFormModuleId(e.target.value)}>
                     <option value="">No Module</option>
-                    {modules.map((m) => <option key={m._id} value={m._id}>{m.title}</option>)}
+                    {modules.map((m) => <option key={m._id} value={m._id}>{m.name || m.title}</option>)}
                   </select>
                   <p className="text-[11px] text-gray-500">Quiz ditautkan ke modul ini.</p>
                 </div>
@@ -359,7 +360,7 @@ export default function AdminQuizzesPage() {
                 <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Title</th>
                 <th className="hidden md:table-cell px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Description</th>
                 <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Questions</th>
-                <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
+                <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Others</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -374,15 +375,18 @@ export default function AdminQuizzesPage() {
                     </button>
                   </td>
                   <td className="hidden md:table-cell px-5 py-4 text-sm text-gray-600">{q.description || "-"}</td>
-                  <td className="px-5 py-4"><Badge variant="success" size="sm">{q.questions_count || 0}</Badge></td>
+                  <td className="px-5 py-4"><Badge variant="success" size="sm">{q.questionsCount ?? q.questions_count ?? 0}</Badge></td>
                   <td className="px-5 py-4 text-right">
-                    <div className="inline-flex gap-2">
+                    <div className="hidden md:inline-flex gap-2">
                       <button onClick={() => setQuizStatus(q, "published")} className="px-2 py-1 text-xs rounded bg-blue-50 text-blue-700 hover:bg-blue-100">Publish</button>
                       <button onClick={() => setQuizStatus(q, "active")} className="px-2 py-1 text-xs rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100">Active</button>
                       <button onClick={() => setQuizStatus(q, "archived")} className="px-2 py-1 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">Archive</button>
                       <a href={`/admin/quizzes/${q._id}`} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Edit & manage questions"><i className="fas fa-edit" /></a>
                       <button onClick={() => removeQuiz(q._id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><i className="fas fa-trash" /></button>
                     </div>
+                    <button onClick={() => setMobileMenuQuiz(q)} className="md:hidden p-2 text-gray-600 hover:bg-gray-100 rounded" title="Others">
+                      <i className="fas fa-ellipsis-v" />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -456,15 +460,15 @@ export default function AdminQuizzesPage() {
             ) : questions.map((q) => (
               <div key={q._id} className="border border-gray-200 rounded-lg p-4">
                 <div className="flex justify-between items-start gap-3">
-                  <div><p className="font-medium text-sm text-gray-900">{q.question_text}</p><p className="text-xs text-gray-500 mt-1">Type: {(q as any).question_type || "multiple_choice"} • Points: {(q as any).points || 10}</p></div>
+                  <div><p className="font-medium text-sm text-gray-900">{q.questionText || q.question_text}</p><p className="text-xs text-gray-500 mt-1">Type: {(q as any).questionType || (q as any).question_type || (q as any).type || "multiple_choice"} • Points: {(q as any).points || 10}</p></div>
                   <button onClick={() => deleteQuestion(q._id)} className="text-red-600 hover:text-red-700"><i className="fas fa-trash" /></button>
                 </div>
                 <ul className="mt-3 space-y-2">
                   {q.options?.map((o) => (
                     <li key={o._id} className="flex items-center justify-between text-sm bg-gray-50 rounded-md px-3 py-2">
                       <span className="flex items-center gap-2">
-                        {o.is_correct ? <i className="fas fa-check-circle text-emerald-600" /> : <i className="far fa-circle text-gray-400" />}
-                        {o.option_text}
+                        {(o.isCorrect ?? o.is_correct) ? <i className="fas fa-check-circle text-emerald-600" /> : <i className="far fa-circle text-gray-400" />}
+                        {o.optionText || o.option_text}
                       </span>
                       <button onClick={() => deleteOption(o._id)} className="text-red-500 hover:text-red-700"><i className="fas fa-times" /></button>
                     </li>
@@ -472,6 +476,44 @@ export default function AdminQuizzesPage() {
                 </ul>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {mobileMenuQuiz && (
+        <div className="md:hidden fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setMobileMenuQuiz(null)} />
+          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-2xl shadow-2xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{mobileMenuQuiz.title}</p>
+                <p className="text-xs text-gray-500">Questions: {mobileMenuQuiz.questionsCount ?? mobileMenuQuiz.questions_count ?? 0}</p>
+              </div>
+              <button onClick={() => setMobileMenuQuiz(null)} className="text-gray-500"><i className="fas fa-times" /></button>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-700 space-y-1">
+              <p>Status: <span className="font-medium">{mobileMenuQuiz.status || "draft"}</span></p>
+              <p>Description: <span className="font-medium">{mobileMenuQuiz.description || "-"}</span></p>
+            </div>
+
+            <div className="space-y-2">
+              <button onClick={() => { setQuizStatus(mobileMenuQuiz, "published"); setMobileMenuQuiz(null); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 text-blue-700">
+                <i className="fas fa-upload" /> Publish
+              </button>
+              <button onClick={() => { setQuizStatus(mobileMenuQuiz, "active"); setMobileMenuQuiz(null); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700">
+                <i className="fas fa-play" /> Active
+              </button>
+              <button onClick={() => { setQuizStatus(mobileMenuQuiz, "archived"); setMobileMenuQuiz(null); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 text-gray-700">
+                <i className="fas fa-archive" /> Archive
+              </button>
+              <a href={`/admin/quizzes/${mobileMenuQuiz._id}`} onClick={() => setMobileMenuQuiz(null)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700">
+                <i className="fas fa-edit" /> Detail & Edit
+              </a>
+              <button onClick={() => { removeQuiz(mobileMenuQuiz._id); setMobileMenuQuiz(null); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 text-red-700">
+                <i className="fas fa-trash" /> Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

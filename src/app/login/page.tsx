@@ -7,7 +7,6 @@ import { PrimaryButton } from "@/components/ui/PrimaryButton";
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
-  const [nim, setNim] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -21,7 +20,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email || undefined, nim: nim || undefined, password: password || undefined }),
+        body: JSON.stringify({ email: email || undefined, password: password || undefined }),
       });
 
       const data = await res.json();
@@ -60,31 +59,42 @@ export default function LoginPage() {
             </div>
           </div>
           <h3 className="text-2xl font-bold text-gray-900 mb-2">Login</h3>
-          <p className="text-gray-500 text-sm mb-6">Admin/Guru gunakan Email + Password. Siswa cukup NIM (password opsional).</p>
+          <p className="text-gray-500 text-sm mb-6">Admin/Guru gunakan Email + Password. Login siswa via mobile (NIM) tidak ditampilkan di form ini.</p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2" htmlFor="email">Email (admin/guru)</label>
-                <div className="relative">
-                  <input className="input-base pl-10" id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@email.com" disabled={loading} />
-                  <span className="absolute left-3 top-3 text-gray-400"><i className="fas fa-envelope"></i></span>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2" htmlFor="nim">NIM (siswa)</label>
-                <div className="relative">
-                  <input className="input-base pl-10" id="nim" value={nim} onChange={(e) => setNim(e.target.value)} placeholder="NIM siswa" disabled={loading} />
-                  <span className="absolute left-3 top-3 text-gray-400"><i className="fas fa-id-card"></i></span>
-                </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2" htmlFor="email">Email</label>
+              <div className="relative">
+                <i className="fas fa-envelope absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"></i>
+                <input
+                  className="input-base pl-10"
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="admin@email.com"
+                  disabled={loading}
+                  style={{ paddingLeft: "2.3rem" }}
+                  required
+                />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2" htmlFor="password">Password (wajib untuk admin/guru)</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2" htmlFor="password">Password</label>
               <div className="relative">
-                <input className="input-base pl-10" id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" disabled={loading} />
-                <span className="absolute left-3 top-3 text-gray-400"><i className="fas fa-lock"></i></span>
+                <i className="fas fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"></i>
+                <input
+                  className="input-base pl-10"
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  disabled={loading}
+                  style={{ paddingLeft: "2.3rem" }}
+                  required
+                />
               </div>
             </div>
 

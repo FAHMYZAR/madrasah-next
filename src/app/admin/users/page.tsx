@@ -18,6 +18,7 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("");
+  const [mobileMenuUser, setMobileMenuUser] = useState<User | null>(null);
 
   const load = async (page = meta.page, role = roleFilter) => {
     const qs = new URLSearchParams({ page: String(page), limit: "10" });
@@ -85,8 +86,8 @@ export default function AdminUsersPage() {
             <h1 className="text-lg font-semibold text-gray-900">Users Management</h1>
             <p className="text-sm text-gray-500">Kelola admin/guru/siswa</p>
           </div>
-          <div className="flex items-center gap-3">
-            <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="input-base">
+          <div className="flex items-center gap-3 flex-wrap">
+            <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="input-base w-full sm:w-auto">
               <option value="">All Roles</option>
               <option value="admin">Admin</option>
               <option value="guru">Guru</option>
@@ -126,7 +127,7 @@ export default function AdminUsersPage() {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Class</label>
                   <input className="input-base" value={editing ? (editing.className || "") : form.className} onChange={(e) => editing ? setEditing({ ...editing, className: e.target.value }) : setForm({ ...form, className: e.target.value })} placeholder="Kelas (opsional)" />
                 </div>
-                <div className="flex items-center gap-2 mt-6">
+                <div className="flex items-center gap-2 md:mt-6">
                   <input id="active" type="checkbox" checked={editing ? editing.isActive : form.isActive} onChange={(e) => editing ? setEditing({ ...editing, isActive: e.target.checked }) : setForm({ ...form, isActive: e.target.checked })} />
                   <label htmlFor="active" className="text-sm text-gray-700">Active</label>
                 </div>
@@ -145,7 +146,7 @@ export default function AdminUsersPage() {
                 </div>
               )}
 
-              <div className="flex justify-end gap-3">
+              <div className="flex flex-col sm:flex-row justify-end gap-3">
                 {editing && <PrimaryButton type="button" variant="secondary" onClick={() => setEditing(null)}>Cancel</PrimaryButton>}
                 <PrimaryButton type="button" onClick={editing ? update : create} loading={loading}>
                   {loading ? "Saving..." : (editing ? "Update User" : "Create User")}
@@ -156,19 +157,19 @@ export default function AdminUsersPage() {
         )}
 
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">User</th>
                 <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Role</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Class</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
+                <th className="hidden md:table-cell px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Class</th>
+                <th className="hidden md:table-cell px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Others</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
               {users.length === 0 ? (
-                <tr><td colSpan={5}><EmptyState icon="users" title="No users" description="Tambah user" /></td></tr>
+                <tr key="empty-users"><td colSpan={5}><EmptyState icon="users" title="No users" description="Tambah user" /></td></tr>
               ) : users.map((u) => (
                 <tr key={u._id} className="hover:bg-gray-50">
                   <td className="px-5 py-4">
@@ -178,12 +179,17 @@ export default function AdminUsersPage() {
                     </div>
                   </td>
                   <td className="px-5 py-4"><Badge variant={u.role === "admin" ? "danger" : u.role === "guru" ? "info" : "neutral"}>{u.role}</Badge></td>
-                  <td className="px-5 py-4 text-sm text-gray-600">{u.className || "-"}</td>
-                  <td className="px-5 py-4">{u.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="neutral">Inactive</Badge>}</td>
-                  <td className="px-5 py-4 text-right space-x-2">
-                    <button onClick={() => setEditing(u)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded"><i className="fas fa-edit" /></button>
-                    <button onClick={() => deactivate(u._id, !u.isActive)} className="p-2 text-amber-600 hover:bg-amber-50 rounded" title="Toggle active"><i className="fas fa-power-off" /></button>
-                    <button onClick={() => remove(u._id)} className="p-2 text-red-600 hover:bg-red-50 rounded"><i className="fas fa-trash" /></button>
+                  <td className="hidden md:table-cell px-5 py-4 text-sm text-gray-600">{u.className || "-"}</td>
+                  <td className="hidden md:table-cell px-5 py-4">{u.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="neutral">Inactive</Badge>}</td>
+                  <td className="px-5 py-4 text-right">
+                    <div className="hidden md:inline-flex items-center gap-2">
+                      <button onClick={() => setEditing(u)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded"><i className="fas fa-edit" /></button>
+                      <button onClick={() => deactivate(u._id, !u.isActive)} className="p-2 text-amber-600 hover:bg-amber-50 rounded" title="Toggle active"><i className="fas fa-power-off" /></button>
+                      <button onClick={() => remove(u._id)} className="p-2 text-red-600 hover:bg-red-50 rounded"><i className="fas fa-trash" /></button>
+                    </div>
+                    <button onClick={() => setMobileMenuUser(u)} className="md:hidden p-2 text-gray-600 hover:bg-gray-100 rounded" title="Others">
+                      <i className="fas fa-ellipsis-v" />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -191,6 +197,39 @@ export default function AdminUsersPage() {
           </table>
         </div>
       </div>
+
+      {mobileMenuUser && (
+        <div className="md:hidden fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setMobileMenuUser(null)} />
+          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-2xl shadow-2xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{mobileMenuUser.name}</p>
+                <p className="text-xs text-gray-500">NIM: {mobileMenuUser.nim}</p>
+              </div>
+              <button onClick={() => setMobileMenuUser(null)} className="text-gray-500"><i className="fas fa-times" /></button>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-700 space-y-1">
+              <p>Role: <span className="font-medium">{mobileMenuUser.role}</span></p>
+              <p>Class: <span className="font-medium">{mobileMenuUser.className || "-"}</span></p>
+              <p>Status: <span className="font-medium">{mobileMenuUser.isActive ? "Active" : "Inactive"}</span></p>
+            </div>
+
+            <div className="space-y-2">
+              <button onClick={() => { setEditing(mobileMenuUser); setMobileMenuUser(null); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700">
+                <i className="fas fa-edit" /> Edit User
+              </button>
+              <button onClick={() => { deactivate(mobileMenuUser._id, !mobileMenuUser.isActive); setMobileMenuUser(null); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 text-amber-700">
+                <i className="fas fa-power-off" /> {mobileMenuUser.isActive ? "Deactivate" : "Activate"}
+              </button>
+              <button onClick={() => { remove(mobileMenuUser._id); setMobileMenuUser(null); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 text-red-700">
+                <i className="fas fa-trash" /> Delete User
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

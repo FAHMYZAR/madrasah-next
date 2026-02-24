@@ -1,6 +1,6 @@
 import { connectDb } from "@/lib/db";
 import { Module } from "@/lib/models/Module";
-import { requireAdminOrGuru } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { fail, ok } from "@/lib/response";
 import { saveUpload } from "@/lib/upload";
 
@@ -11,7 +11,7 @@ function normalizeCode(name?: string) {
 
 export async function GET(req: Request) {
   try {
-    const auth = await requireAdminOrGuru();
+    const auth = await requireAdmin();
     await connectDb();
 
     const { searchParams } = new URL(req.url);
@@ -31,7 +31,7 @@ export async function GET(req: Request) {
     if (auth.role === "guru") query.assignedTeacherId = auth.sub;
 
     const [modules, total] = await Promise.all([
-      Module.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Module.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       Module.countDocuments(query),
     ]);
 
@@ -44,7 +44,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const actor = await requireAdminOrGuru();
+    const actor = await requireAdmin();
     await connectDb();
 
     const ct = req.headers.get("content-type") || "";
@@ -91,7 +91,7 @@ export async function POST(req: Request) {
     if (actor.role === "guru") payload.assignedTeacherId = actor.sub;
 
     const mod = await Module.create(payload);
-    return ok(mod, 201);
+    return ok(mod.toObject(), 201);
   } catch (e: unknown) {
     if (String(e).includes("FORBIDDEN") || String(e).includes("UNAUTHORIZED")) return fail("Unauthorized", 401);
     return fail("Failed to create module", 422, { error: String(e) });

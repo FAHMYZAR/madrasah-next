@@ -13,6 +13,7 @@ type Phase = { _id: string; moduleId: string; title: string; description?: strin
 type Material = { _id: string; phaseId: string; type: "pdf" | "video" | "link"; title: string; url: string; description?: string; order: number; isVisible: boolean };
 type Enrollment = { _id: string; moduleId: string; userId: string; status: string; enrolledAt: string };
 type User = { _id: string; name: string; role: "admin" | "guru" | "user" };
+type ModuleRecap = { totalStudents: number; totalAttempts: number; averageScore: number; passed: number; failed: number; quizzesCount: number };
 
 const tabs = ["Phases", "Quizzes", "Enrollments", "Settings"] as const;
 
@@ -32,7 +33,9 @@ export default function ModuleDetailPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showPhaseModal, setShowPhaseModal] = useState(false);
   const [showMaterialModal, setShowMaterialModal] = useState(false);
+  const [showMobileTabSheet, setShowMobileTabSheet] = useState(false);
   const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [recap, setRecap] = useState<ModuleRecap | null>(null);
   const [settings, setSettings] = useState<Partial<Module>>({});
 
   const loadModule = async () => {
@@ -60,13 +63,22 @@ export default function ModuleDetailPage() {
       setEnrollments(res.data || []);
     } catch {}
   };
+  const loadRecap = async () => {
+    try {
+      const res = await apiFetch<ModuleRecap>(`/api/admin/modules/${id}/recap`);
+      setRecap(res || null);
+    } catch {
+      setRecap(null);
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
-    loadModule();
-    loadPhases();
-    loadTeachers();
-    loadEnrollments();
+    loadModule().catch((e: any) => toast.error(e?.message || "Failed to fetch module"));
+    loadPhases().catch((e: any) => toast.error(e?.message || "Failed to fetch phases"));
+    loadTeachers().catch(() => {});
+    loadEnrollments().catch((e: any) => toast.error(e?.message || "Failed to fetch enrollments"));
+    loadRecap().catch(() => {});
   }, [id]);
 
   useEffect(() => {
@@ -153,10 +165,15 @@ export default function ModuleDetailPage() {
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200">
-            <div className="flex px-5 border-b border-gray-200 overflow-x-auto text-sm">
+            <div className="hidden md:flex px-5 border-b border-gray-200 overflow-x-auto text-sm">
               {tabs.map((t) => (
                 <button key={t} onClick={() => setTab(t)} className={`px-4 py-3 border-b-2 ${tab === t ? "border-emerald-500 text-emerald-700" : "border-transparent text-gray-500"}`}>{t}</button>
               ))}
+            </div>
+            <div className="md:hidden flex px-3 border-b border-gray-200 overflow-x-auto text-sm gap-1">
+              <button onClick={() => setTab("Phases")} className={`px-3 py-3 border-b-2 ${tab === "Phases" ? "border-emerald-500 text-emerald-700" : "border-transparent text-gray-500"}`}>Phases</button>
+              <button onClick={() => setTab("Settings")} className={`px-3 py-3 border-b-2 ${tab === "Settings" ? "border-emerald-500 text-emerald-700" : "border-transparent text-gray-500"}`}>Settings</button>
+              <button onClick={() => setShowMobileTabSheet(true)} className={`px-3 py-3 border-b-2 ${(tab === "Quizzes" || tab === "Enrollments") ? "border-emerald-500 text-emerald-700" : "border-transparent text-gray-500"}`}>Others</button>
             </div>
             <div className="p-5">
               {tab === "Phases" && (
@@ -224,6 +241,16 @@ export default function ModuleDetailPage() {
 
               {tab === "Enrollments" && (
                 <div className="space-y-3">
+                  {recap && (
+                    <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+                      <div className="rounded-lg border border-gray-200 bg-gray-50 p-2"><p className="text-[11px] text-gray-500">Students</p><p className="font-semibold">{recap.totalStudents}</p></div>
+                      <div className="rounded-lg border border-gray-200 bg-gray-50 p-2"><p className="text-[11px] text-gray-500">Attempts</p><p className="font-semibold">{recap.totalAttempts}</p></div>
+                      <div className="rounded-lg border border-gray-200 bg-gray-50 p-2"><p className="text-[11px] text-gray-500">Avg Score</p><p className="font-semibold">{recap.averageScore}</p></div>
+                      <div className="rounded-lg border border-gray-200 bg-gray-50 p-2"><p className="text-[11px] text-gray-500">Passed</p><p className="font-semibold text-emerald-700">{recap.passed}</p></div>
+                      <div className="rounded-lg border border-gray-200 bg-gray-50 p-2"><p className="text-[11px] text-gray-500">Failed</p><p className="font-semibold text-red-700">{recap.failed}</p></div>
+                      <div className="rounded-lg border border-gray-200 bg-gray-50 p-2"><p className="text-[11px] text-gray-500">Quizzes</p><p className="font-semibold">{recap.quizzesCount}</p></div>
+                    </div>
+                  )}
                   {enrollments.length === 0 ? <EmptyState icon="id-badge" title="No enrollments" description="" /> : (
                     <table className="min-w-full divide-y divide-gray-200 text-sm">
                       <thead className="bg-gray-50">
@@ -236,7 +263,7 @@ export default function ModuleDetailPage() {
                       <tbody className="divide-y divide-gray-200">
                         {enrollments.map((en) => (
                           <tr key={en._id}>
-                            <td className="px-3 py-2">{en.user?.name || en.userId}</td>
+                            <td className="px-3 py-2">{typeof en.userId === "object" ? (en.userId?.name || en.userId?.nim || "-") : (en.user?.name || en.userId)}</td>
                             <td className="px-3 py-2">{en.status}</td>
                             <td className="px-3 py-2">{new Date(en.enrolledAt).toLocaleString()}</td>
                           </tr>
@@ -310,6 +337,26 @@ export default function ModuleDetailPage() {
               )}
             </div>
           </div>
+
+          {showMobileTabSheet && (
+            <div className="md:hidden fixed inset-0 z-50">
+              <div className="absolute inset-0 bg-black/40" onClick={() => setShowMobileTabSheet(false)} />
+              <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-2xl shadow-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-gray-900">Others</p>
+                  <button onClick={() => setShowMobileTabSheet(false)} className="text-gray-500"><i className="fas fa-times" /></button>
+                </div>
+                <div className="space-y-2">
+                  <button onClick={() => { setTab("Quizzes"); setShowMobileTabSheet(false); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700">
+                    <i className="fas fa-question-circle" /> Quizzes
+                  </button>
+                  <button onClick={() => { setTab("Enrollments"); setShowMobileTabSheet(false); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 text-blue-700">
+                    <i className="fas fa-id-badge" /> Enrollments
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {showPhaseModal && (
             <div className="fixed inset-0 z-40 bg-black/50 flex items-start justify-center overflow-y-auto py-10 px-4">

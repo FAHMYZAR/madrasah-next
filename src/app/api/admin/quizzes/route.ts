@@ -1,21 +1,26 @@
+import { z } from "zod";
+import { requireAdmin } from "@/lib/auth";
+import { ensureModuleAccess } from "@/lib/access";
 import { connectDb } from "@/lib/db";
-import { Quiz } from "@/lib/models/Quiz";
-import { Question } from "@/lib/models/Question";
 import { Module } from "@/lib/models/Module";
-async function ensureQuizModuleAccess(modId: string, userId: string, role: string) {
-  const mod = await Module.findById(modId);
-  if (!mod) throw new Error("MODULE_NOT_FOUND");
-  if (role === "guru" && String(mod.assignedTeacherId || mod.createdBy) !== userId) throw new Error("FORBIDDEN");
-  return mod;
-}
-
-
-import { requireAdminOrGuru } from "@/lib/auth";
+import { Question } from "@/lib/models/Question";
+import { Quiz } from "@/lib/models/Quiz";
 import { fail, ok } from "@/lib/response";
+
+const createQuizSchema = z.object({
+  title: z.string().trim().min(1),
+  description: z.string().optional().default(""),
+  module_id: z.string().min(1),
+  duration_minutes: z.number().int().min(1).max(300).default(30),
+  pass_score: z.number().int().min(1).max(100).default(70),
+  status: z.enum(["draft", "published", "active", "archived"]).default("draft"),
+  started_at: z.string().optional(),
+  ended_at: z.string().optional(),
+});
 
 export async function GET(req: Request) {
   try {
-    const auth = await requireAdminOrGuru();
+    const auth = await requireAdmin();
     await connectDb();
 
     const { searchParams } = new URL(req.url);
@@ -28,7 +33,11 @@ export async function GET(req: Request) {
     const query: Record<string, unknown> = {};
     if (moduleId) query.module_id = moduleId;
     if (search) query.$or = [{ title: { $regex: search, $options: "i" } }, { description: { $regex: search, $options: "i" } }];
-    if (auth.role === "guru") query.created_by = auth.sub;
+
+    if (auth.role === "guru") {
+      const allowedModules = await Module.find({ assignedTeacherId: auth.sub }).select("_id").lean();
+      query.module_id = { $in: allowedModules.map((m: any) => String(m._id)) };
+    }
 
     const [quizzes, total] = await Promise.all([
       Quiz.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
@@ -36,16 +45,10 @@ export async function GET(req: Request) {
     ]);
 
     const quizzesWithCounts = await Promise.all(
-      quizzes.map(async (q) => {
-        const questionCount = await Question.countDocuments({ quiz_id: String(q._id) });
-        return { ...q, questions_count: questionCount };
-      })
+      quizzes.map(async (q) => ({ ...q, questions_count: await Question.countDocuments({ quiz_id: String(q._id) }) }))
     );
 
-    return ok({
-      data: quizzesWithCounts,
-      meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1, search, module_id: moduleId },
-    });
+    return ok({ data: quizzesWithCounts, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } });
   } catch (e: unknown) {
     if (String(e).includes("FORBIDDEN") || String(e).includes("UNAUTHORIZED")) return fail("Unauthorized", 401);
     return fail("Failed to fetch quizzes", 500, { error: String(e) });
@@ -54,42 +57,30 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const actor = await requireAdminOrGuru();
+    const actor = await requireAdmin();
     const body = await req.json();
+    const parsed = createQuizSchema.safeParse({ ...body, duration_minutes: Number(body.duration_minutes ?? 30), pass_score: Number(body.pass_score ?? 70) });
+    if (!parsed.success) return fail("Validation failed", 422, parsed.error.flatten());
+
     await connectDb();
-
-    const title = String(body.title || "").trim();
-    const description = String(body.description || "").trim();
-    const module_id = body.module_id ? String(body.module_id) : undefined;
-    const duration_minutes = Number(body.duration_minutes || 30);
-    const pass_score = Number(body.pass_score || 70);
-    const status = body.status || "draft";
-
-    if (!title) return fail("Title is required", 422);
-    if (duration_minutes < 1 || duration_minutes > 300) return fail("Duration harus 1-300 menit", 422);
-    if (pass_score < 1 || pass_score > 100) return fail("Pass score harus 1-100", 422);
-
-    if (module_id && actor.role === "guru") {
-      const mod = await Module.findById(module_id).lean();
-      if (!mod) return fail("Module not found", 404);
-      if (String(mod.created_by) !== actor.sub) return fail("Guru hanya boleh pakai modul miliknya", 403);
-    }
+    await ensureModuleAccess(parsed.data.module_id, actor);
 
     const quiz = await Quiz.create({
-      title,
-      description,
-      module_id: module_id || null,
+      title: parsed.data.title,
+      description: parsed.data.description,
+      module_id: parsed.data.module_id,
       created_by: actor.sub,
-      duration_minutes,
-      pass_score,
-      status,
-      started_at: body.started_at ? new Date(body.started_at) : null,
-      ended_at: body.ended_at ? new Date(body.ended_at) : null,
+      duration_minutes: parsed.data.duration_minutes,
+      pass_score: parsed.data.pass_score,
+      status: parsed.data.status,
+      started_at: parsed.data.started_at ? new Date(parsed.data.started_at) : null,
+      ended_at: parsed.data.ended_at ? new Date(parsed.data.ended_at) : null,
     });
 
-    return ok(quiz, 201);
+    return ok(quiz.toObject(), 201);
   } catch (e: unknown) {
     if (String(e).includes("FORBIDDEN") || String(e).includes("UNAUTHORIZED")) return fail("Unauthorized", 401);
+    if (String(e).includes("NOT_FOUND")) return fail("Module not found", 404);
     return fail("Failed to create quiz", 422, { error: String(e) });
   }
 }

@@ -8,16 +8,20 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Badge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
 
-type Option = { _id: string; option_text: string; is_correct?: boolean };
-type Question = { _id: string; question_text: string; question_type?: string; points?: number; options: Option[] };
+type Option = { _id: string; optionText?: string; option_text?: string; isCorrect?: boolean; is_correct?: boolean };
+type Question = { _id: string; questionText?: string; question_text?: string; questionType?: string; question_type?: string; type?: string; points?: number; options: Option[] };
 type QuizDetail = {
   _id: string;
   title: string;
   description?: string;
   status?: string;
+  durationMinutes?: number;
   duration_minutes?: number;
+  passScore?: number;
   pass_score?: number;
+  startAt?: string | null;
   start_at?: string | null;
+  endAt?: string | null;
   end_at?: string | null;
   questions?: Question[];
 };
@@ -115,8 +119,8 @@ export default function QuizDetailPage() {
             <p className="text-sm text-gray-600 mt-1">{quiz?.description}</p>
             <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500">
               <Badge variant="info" size="sm">Status: {quiz?.status || "draft"}</Badge>
-              <Badge variant="neutral" size="sm">Duration: {quiz?.duration_minutes || 30} min</Badge>
-              <Badge variant="success" size="sm">Pass: {quiz?.pass_score || 70}</Badge>
+              <Badge variant="neutral" size="sm">Duration: {quiz?.durationMinutes || quiz?.duration_minutes || 30} min</Badge>
+              <Badge variant="success" size="sm">Pass: {quiz?.passScore || quiz?.pass_score || 70}</Badge>
             </div>
           </div>
         </div>
@@ -172,18 +176,18 @@ export default function QuizDetailPage() {
               <div key={q._id} className="border border-gray-200 rounded-lg p-4">
                 <div className="flex justify-between gap-4">
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">{q.question_text}</p>
-                    <p className="text-xs text-gray-500">Type: {q.question_type || "multiple_choice"} • Points: {q.points || 10}</p>
+                    <p className="text-sm font-semibold text-gray-900">{q.questionText || q.question_text}</p>
+                    <p className="text-xs text-gray-500">Type: {q.questionType || q.question_type || q.type || "multiple_choice"} • Points: {q.points || 10}</p>
                   </div>
                   <button onClick={() => deleteQuestion(q._id)} className="text-red-600 hover:text-red-700"><i className="fas fa-trash" /></button>
                 </div>
-                {q.question_type !== "essay" && (
+                {(q.questionType || q.question_type || q.type) !== "essay" && (
                   <ul className="mt-2 space-y-1">
                     {q.options?.map((o) => (
                       <li key={o._id} className="flex items-center justify-between text-sm bg-gray-50 rounded-md px-3 py-2">
                         <span className="flex items-center gap-2">
-                          {o.is_correct ? <i className="fas fa-check-circle text-emerald-600" /> : <i className="far fa-circle text-gray-400" />}
-                          {o.option_text}
+                          {(o.isCorrect ?? o.is_correct) ? <i className="fas fa-check-circle text-emerald-600" /> : <i className="far fa-circle text-gray-400" />}
+                          {o.optionText || o.option_text}
                         </span>
                         <button onClick={() => deleteOption(o._id)} className="text-red-500 hover:text-red-700"><i className="fas fa-times" /></button>
                       </li>

@@ -1,52 +1,47 @@
+import { z } from "zod";
+import { requireAdmin } from "@/lib/auth";
+import { ensureQuizAccess } from "@/lib/access";
 import { connectDb } from "@/lib/db";
-import { requireAdminOrGuru } from "@/lib/auth";
-import { UserAnswer } from "@/lib/models/UserAnswer";
 import { Question } from "@/lib/models/Question";
 import { Quiz } from "@/lib/models/Quiz";
 import { QuizAttempt } from "@/lib/models/QuizAttempt";
+import { UserAnswer } from "@/lib/models/UserAnswer";
 import { fail, ok } from "@/lib/response";
+
+const gradeSchema = z.object({ user_answer_id: z.string().min(1), awarded_points: z.number().min(0), is_correct: z.boolean() });
 
 export async function POST(req: Request) {
   try {
-    const auth = await requireAdminOrGuru();
+    const auth = await requireAdmin();
     const body = await req.json();
-    const user_answer_id = String(body.user_answer_id || "");
-    const awarded_points = Number(body.awarded_points ?? 0);
-    const is_correct = !!body.is_correct;
-
-    if (!user_answer_id) return fail("user_answer_id is required", 422);
-    if (awarded_points < 0) return fail("awarded_points invalid", 422);
+    const parsed = gradeSchema.safeParse({ ...body, awarded_points: Number(body.awarded_points ?? 0) });
+    if (!parsed.success) return fail("Validation failed", 422, parsed.error.flatten());
 
     await connectDb();
-    const ua = await UserAnswer.findById(user_answer_id);
+    const ua = await UserAnswer.findById(parsed.data.user_answer_id);
     if (!ua) return fail("User answer not found", 404);
 
-    const q = await Question.findById(ua.question_id).lean() as any;
+    const q = (await Question.findById(ua.question_id).lean()) as any;
     if (!q) return fail("Question not found", 404);
-    const quiz = await Quiz.findById(q.quiz_id).lean() as any;
+    const quiz = (await Quiz.findById(q.quiz_id).lean()) as any;
     if (!quiz) return fail("Quiz not found", 404);
-    if (auth.role === "guru" && String(quiz.created_by) !== auth.sub) return fail("Unauthorized", 401);
+    await ensureQuizAccess(String(quiz._id), auth);
 
-    const maxPts = Number(q.points || 10);
-    const pts = Math.min(maxPts, awarded_points);
-
-    ua.awarded_points = pts;
-    ua.is_correct = is_correct;
+    ua.awarded_points = Math.min(Number(q.points || 10), parsed.data.awarded_points);
+    ua.is_correct = parsed.data.is_correct;
     ua.review_status = "manual_graded";
     await ua.save();
 
-    // recompute attempt score
-    const allAnswers = await UserAnswer.find({ attempt_id: ua.attempt_id }).lean() as any[];
+    const allAnswers = (await UserAnswer.find({ attempt_id: ua.attempt_id }).lean()) as any[];
     const qIds = allAnswers.map((a) => String(a.question_id));
-    const questions = await Question.find({ _id: { $in: qIds } }).lean() as any[];
+    const questions = (await Question.find({ _id: { $in: qIds } }).lean()) as any[];
     const qMap = new Map(questions.map((qq) => [String(qq._id), qq]));
 
     let earned = 0;
     let total = 0;
     for (const a of allAnswers) {
       const qq = qMap.get(String(a.question_id));
-      const p = Number(qq?.points || 10);
-      total += p;
+      total += Number(qq?.points || 10);
       earned += Number(a.awarded_points || 0);
     }
 

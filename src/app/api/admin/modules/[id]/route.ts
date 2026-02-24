@@ -1,15 +1,15 @@
 import { connectDb } from "@/lib/db";
 import { Module } from "@/lib/models/Module";
-import { requireAdminOrGuru } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { fail, ok } from "@/lib/response";
 import { saveUpload } from "@/lib/upload";
 
 async function loadManagedModule(id: string) {
-  const auth = await requireAdminOrGuru();
+  const auth = await requireAdmin();
   await connectDb();
-  const mod = await Module.findById(id);
+  const mod = await Module.findById(id).lean();
   if (!mod) return { auth, mod: null };
-  if (auth.role === "guru" && String(mod.assignedTeacherId || mod.createdBy) !== auth.sub) throw new Error("FORBIDDEN");
+  if (auth.role === "guru" && String(mod.assignedTeacherId) !== auth.sub) throw new Error("FORBIDDEN");
   return { auth, mod };
 }
 
@@ -68,7 +68,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     Object.keys(patch).forEach((key) => patch[key] === undefined && delete patch[key]);
 
-    const mod = await Module.findByIdAndUpdate(id, patch, { new: true });
+    const mod = await Module.findByIdAndUpdate(id, patch, { new: true }).lean();
     if (!mod) return fail("Module not found", 404);
     return ok(mod);
   } catch (e: unknown) {

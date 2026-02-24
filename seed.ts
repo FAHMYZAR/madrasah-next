@@ -1,238 +1,356 @@
 // @ts-nocheck
 /**
- * Seed script to populate database with realistic dummy data
- * Run with: bun run seed
+ * Full seed rebuild for final LMS architecture.
+ * Run: bun run seed
  */
 
+import bcrypt from "bcryptjs";
 import { connectDb } from "./src/lib/db";
 import { User } from "./src/lib/models/User";
 import { Module } from "./src/lib/models/Module";
+import { Phase } from "./src/lib/models/Phase";
+import { Material } from "./src/lib/models/Material";
 import { Quiz } from "./src/lib/models/Quiz";
 import { Question } from "./src/lib/models/Question";
 import { AnswerOption } from "./src/lib/models/AnswerOption";
+import { Enrollment } from "./src/lib/models/Enrollment";
 import { QuizAttempt } from "./src/lib/models/QuizAttempt";
 import { UserAnswer } from "./src/lib/models/UserAnswer";
-import bcrypt from "bcryptjs";
 
-const SAMPLE_NAMES = [
-  "Ahmad Hidayat", "Fatimah Zahra", "Muhammad Rizki", "Nurul Aini", "Ibrahim Fachri",
-  "Aisyah Putri", "Umar Bakri", "Khadijah Siti", "Ali Imran", "Maryam Hasanah",
-  "Yusuf Kamal", "Zainab Nur", "Ismail Hadi", "Rukayah Sari", "Harun Ar-Rasyid",
-  "Salma Diana", "Fikri Abdullah", "Hafizah Maya", "Ridwan Azis", "Aminah Lestari",
+const classes = ["4A", "4B", "5A", "5B", "6A", "6B"];
+
+const studentNames = [
+  "Ahmad Rizqi", "Alya Nabila", "Budi Santoso", "Citra Azzahra", "Dimas Ramadhan",
+  "Eka Putri", "Farhan Maulana", "Gina Salsabila", "Hafiz Nugraha", "Intan Maharani",
+  "Joko Pratama", "Kirana Dewi", "Luthfi Hakim", "Mira Anjani", "Naufal Zaky",
+  "Ovi Larasati", "Putra Mahendra", "Qonita Safira", "Rafi Akbar", "Siti Rahma",
 ];
 
-const SAMPLE_EMAILS = SAMPLE_NAMES.map((name) => 
-  name.toLowerCase().replace(/\s+/g, ".") + "@madrasah.com"
-);
+const guruNames = ["Guru Fiqih", "Guru Aqidah", "Guru Bahasa Arab"];
 
-const MODULE_TITLES = [
-  "Pengantar Ilmu Tajwid", "Sejarah Nabi Muhammad SAW", "Fiqh Shalat", "Aqidah Islam",
-  "Bahasa Arab Dasar", "Hafalan Juz 30", "Adab Muslim", "Sirah Nabawiyah",
-  "Ilmu Fara'id", "Ulumul Quran", "Hadits Arbain", "Fiqh Puasa",
-  "Tafsir Jalalain", "Nahwu Shorof", "Manasik Haji", "Akhlak Mulia",
+const moduleDefs = [
+  { name: "Fiqih Dasar", code: "FIQ-001", description: "Materi fiqih dasar MI" },
+  { name: "Aqidah Akhlak", code: "AQD-001", description: "Aqidah dan akhlak untuk MI" },
+  { name: "Bahasa Arab Dasar", code: "BAR-001", description: "Dasar kosakata dan tata bahasa Arab" },
 ];
 
-const MODULE_DESCRIPTIONS = [
-  "Pelajaran dasar membaca Al-Quran dengan benar",
-  "Mengenal kehidupan Nabi Muhammad SAW dari lahir hingga wafat",
-  "Panduan lengkap tata cara shalat sesuai sunnah",
-  "Dasar-dasar keyakinan dalam Islam",
-  "Memahami bahasa Arab untuk membaca kitab kuning",
-  "Program menghafal juz 30 dengan metode mudah",
-  "Etika dan adab seorang muslim dalam kehidupan sehari-hari",
-  "Perjalanan hidup Rasulullah SAW dan pelajaran yang bisa diambil",
-  "Ilmu waris dalam Islam",
-  "Memahami ilmu-ilmu Al-Quran",
-  "40 hadits pilihan Nabi Muhammad SAW",
-  "Tata cara puasa dan hukum-hukumnya",
-  "Tafsir Al-Quran menurut Imam Jalalain",
-  "Dasar-dasar tata bahasa Arab",
-  "Panduan lengkap ibadah haji dan umrah",
-  "Membentuk karakter muslim yang berakhlak mulia",
+const phaseDefs = ["Pengenalan", "Pendalaman", "Evaluasi"];
+
+const materialPack = [
+  { type: "pdf", title: "Ringkasan Materi", url: "https://example.org/materi.pdf" },
+  { type: "video", title: "Video Pembelajaran", url: "https://example.org/video.mp4" },
+  { type: "link", title: "Referensi Tambahan", url: "https://example.org/referensi" },
 ];
 
-const QUIZ_TITLES = [
-  "Quiz Tajwid Dasar", "Quiz Sejarah Nabi", "Quiz Fiqh Shalat", "Quiz Aqidah",
-  "Quiz Bahasa Arab", "Quiz Hafalan", "Quiz Adab", "Quiz Sirah",
-  "Quiz Fara'id", "Quiz Ulumul Quran", "Quiz Hadits", "Quiz Puasa",
-];
+function randomInt(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
 
-const QUESTION_TEMPLATES = [
-  { q: "Apa hukum bacaan nun mati bertemu dengan huruf ba?", options: ["Ikhfa", "Idgham", "Iqlab", "Izhar"], correct: 2 },
-  { q: "Nabi Muhammad SAW lahir pada tahun?", options: ["571 M", "632 M", "580 M", "600 M"], correct: 0 },
-  { q: "Berapa rakaat shalat subuh?", options: ["1", "2", "3", "4"], correct: 1 },
-  { q: "Rukun Islam yang ketiga adalah?", options: ["Shalat", "Puasa", "Zakat", "Haji"], correct: 2 },
-  { q: "Huruf hijaiyah ada berapa?", options: ["26", "28", "29", "30"], correct: 2 },
-  { q: "Surat Al-Fatihah terdiri dari berapa ayat?", options: ["5", "6", "7", "8"], correct: 2 },
-  { q: "Malaikat yang menyampaikan wahyu adalah?", options: ["Mikail", "Israfil", "Jibril", "Izrail"], correct: 2 },
-  { q: "Shalat wajib dalam sehari semalam ada?", options: ["3 waktu", "4 waktu", "5 waktu", "6 waktu"], correct: 2 },
-  { q: "Kitab suci umat Islam adalah?", options: ["Taurat", "Injil", "Zabur", "Al-Quran"], correct: 3 },
-  { q: "Nabi terakhir dalam Islam adalah?", options: ["Nabi Isa", "Nabi Musa", "Nabi Muhammad", "Nabi Ibrahim"], correct: 2 },
-];
+function pick<T>(arr: T[]): T {
+  return arr[randomInt(0, arr.length - 1)];
+}
 
-async function hashPassword(password: string) {
-  return bcrypt.hash(password, 12);
+function toSnake(input: Record<string, any>) {
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(input)) {
+    const sk = k.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
+    out[sk] = v;
+  }
+  return out;
 }
 
 async function seed() {
-  console.log("🌱 Starting database seed...");
+  console.log("🌱 FULL SEED REBUILD START");
   await connectDb();
-  console.log("✅ Connected to database");
 
-  // Clear existing data
-  console.log("🗑️  Clearing existing data...");
-  await UserAnswer.deleteMany({});
-  await QuizAttempt.deleteMany({});
-  await AnswerOption.deleteMany({});
-  await Question.deleteMany({});
-  await Quiz.deleteMany({});
-  await Module.deleteMany({});
-  await User.deleteMany({});
-  console.log("✅ Data cleared");
+  // PHASE 2: reset collections (idempotent)
+  await Promise.all([
+    User.deleteMany({}),
+    Module.deleteMany({}),
+    Phase.deleteMany({}),
+    Material.deleteMany({}),
+    Quiz.deleteMany({}),
+    Question.deleteMany({}),
+    AnswerOption.deleteMany({}),
+    Enrollment.deleteMany({}),
+    QuizAttempt.deleteMany({}),
+    UserAnswer.deleteMany({}),
+  ]);
 
-  // Create admin user
-  console.log("👤 Creating admin user...");
-  const adminPassword = await hashPassword("admin123");
+  const adminPassword = await bcrypt.hash("admin123", 12);
+  const userPassword = await bcrypt.hash("user123", 12);
+
+  // users
   const admin = await User.create({
-    name: "Administrator",
+    nim: "ADM0001",
+    name: "Admin Utama",
     email: "admin@madrasah.com",
-    password: adminPassword,
     role: "admin",
+    className: "",
+    isActive: true,
+    password: adminPassword,
   });
-  console.log(`✅ Admin created: ${admin.email}`);
 
-  // Create regular users
-  console.log("👥 Creating users...");
-  const userPassword = await hashPassword("user123");
-  const users = await User.create(
-    SAMPLE_NAMES.slice(0, 20).map((name, i) => ({
+  const gurus = await User.insertMany(
+    guruNames.map((name, idx) => ({
+      nim: `GRU${String(idx + 1).padStart(4, "0")}`,
       name,
-      email: SAMPLE_EMAILS[i],
+      email: `guru${idx + 1}@madrasah.local`,
+      role: "guru",
+      className: "",
+      isActive: true,
       password: userPassword,
-      role: i === 0 ? "admin" : (i <= 4 ? "guru" : "user"),
     }))
   );
-  console.log(`✅ Created ${users.length} users`);
 
-  // Create modules
-  console.log("📚 Creating modules...");
-  const guruUsers = users.filter((u) => u.role === "guru");
-  const modules = await Module.create(
-    MODULE_TITLES.map((title, i) => ({
-      title,
-      description: MODULE_DESCRIPTIONS[i] || "Materi pembelajaran untuk madrasah",
-      content: "",
-      created_by: (guruUsers[i % guruUsers.length]?._id || admin._id).toString(),
+  const students = await User.insertMany(
+    studentNames.map((name, idx) => ({
+      nim: `SIS${String(idx + 1).padStart(4, "0")}`,
+      name,
+      email: `siswa${idx + 1}@madrasah.local`,
+      role: "user",
+      className: classes[idx % classes.length],
+      isActive: true,
+      password: userPassword,
     }))
   );
-  console.log(`✅ Created ${modules.length} modules`);
 
-  // Create quizzes with questions and options
-  console.log("📝 Creating quizzes...");
-  let totalQuestions = 0;
-  let totalOptions = 0;
+  // modules
+  const modules = await Module.insertMany(
+    moduleDefs.map((m, idx) => ({
+      name: m.name,
+      code: m.code,
+      description: m.description,
+      createdBy: admin._id,
+      assignedTeacherId: gurus[idx % gurus.length]._id,
+      isActive: true,
+      visibility: "public",
+      enrollmentType: "open",
+      enrollKey: null,
+      startDate: null,
+      endDate: null,
+    }))
+  );
 
-  for (let i = 0; i < Math.min(15, modules.length); i++) {
-    const moduleOwner = modules[i].created_by;
-    const quiz = await Quiz.create({
-      title: QUIZ_TITLES[i % QUIZ_TITLES.length] + ` ${i + 1}`,
-      description: `Quiz untuk modul ${MODULE_TITLES[i]}`,
-      module_id: modules[i]._id.toString(),
-      created_by: String(moduleOwner),
-      status: i % 3 === 0 ? "active" : "published",
-      duration_minutes: 20 + (i % 5) * 5,
-      pass_score: 70,
-    });
-
-    // Create 5-10 questions per quiz
-    const numQuestions = 5 + Math.floor(Math.random() * 6);
-    for (let j = 0; j < numQuestions; j++) {
-      const template = QUESTION_TEMPLATES[(i * numQuestions + j) % QUESTION_TEMPLATES.length];
-      const question = await Question.create({
-        quiz_id: quiz._id.toString(),
-        question_text: template.q,
-        points: 10,
+  // phases
+  const phases: any[] = [];
+  for (const mod of modules) {
+    for (let i = 0; i < phaseDefs.length; i++) {
+      const ph = await Phase.create({
+        moduleId: mod._id,
+        title: phaseDefs[i],
+        description: `${phaseDefs[i]} - ${mod.name}`,
+        order: i,
+        isPublished: true,
+        createdBy: mod.assignedTeacherId,
       });
-
-      // Create 4 options per question
-      for (let k = 0; k < 4; k++) {
-        await AnswerOption.create({
-          question_id: question._id.toString(),
-          option_text: template.options[k],
-          is_correct: k === template.correct,
-        });
-        totalOptions++;
-      }
-      totalQuestions++;
+      phases.push(ph);
     }
   }
-  console.log(`✅ Created quizzes with ${totalQuestions} questions and ${totalOptions} options`);
 
-  // Create some quiz attempts
-  console.log("📊 Creating quiz attempts...");
-  const regularUsers = users.filter((u) => u.role === "user");
-  const quizzes = await Quiz.find();
-  
-  let attemptsCreated = 0;
-  for (const user of regularUsers.slice(0, 10)) {
-    const numAttempts = Math.floor(Math.random() * 3) + 1;
-    for (let a = 0; a < numAttempts; a++) {
-      const quiz = quizzes[Math.floor(Math.random() * quizzes.length)];
-      const questions = await Question.find({ quiz_id: quiz._id.toString() }).limit(5);
-      
-      const attempt = await QuizAttempt.create({
-        user_id: user._id.toString(),
-        quiz_id: quiz._id.toString(),
-        started_at: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
+  // materials
+  let materialCount = 0;
+  for (const ph of phases) {
+    for (let i = 0; i < materialPack.length; i++) {
+      await Material.create({
+        phaseId: ph._id,
+        type: materialPack[i].type,
+        title: `${materialPack[i].title} ${ph.title}`,
+        url: materialPack[i].url,
+        description: `Materi ${materialPack[i].type} untuk ${ph.title}`,
+        order: i,
+        isVisible: true,
+        createdBy: ph.createdBy,
       });
+      materialCount++;
+    }
+  }
 
-      // Create answers
-      const answers = [];
-      let correctCount = 0;
-      for (const q of questions) {
-        const options = await AnswerOption.find({ question_id: q._id.toString() });
-        const correctOption = options.find((o) => o.is_correct);
-        const selectedOption = options[Math.floor(Math.random() * options.length)];
-        
-        if (selectedOption._id.toString() === correctOption?._id.toString()) {
-          correctCount++;
+  // quizzes + questions + options
+  const quizzes: any[] = [];
+  let questionCount = 0;
+  let optionCount = 0;
+
+  for (const mod of modules) {
+    for (let i = 0; i < 2; i++) {
+      const quizPayload = {
+        title: `${mod.name} Quiz ${i + 1}`,
+        description: `Evaluasi ${mod.name} bagian ${i + 1}`,
+        moduleId: String(mod._id),
+        createdBy: String(mod.assignedTeacherId),
+        status: "active",
+        durationMinutes: i % 2 === 0 ? 30 : 45,
+        passScore: 70,
+        startAt: null,
+        endAt: null,
+      };
+      const quiz = await Quiz.create(toSnake(quizPayload));
+      quizzes.push(quiz);
+
+      // 3 multiple choice
+      for (let q = 0; q < 3; q++) {
+        const questionPayload = {
+          quizId: String(quiz._id),
+          questionText: `Soal pilihan ganda ${q + 1} untuk ${quiz.title}`,
+          type: "multiple_choice",
+          points: 10,
+          order: q,
+          answerKeyText: "",
+          manualGradingRequired: false,
+        };
+        const question = await Question.create(toSnake(questionPayload));
+        questionCount++;
+
+        const correctIndex = randomInt(0, 3);
+        for (let o = 0; o < 4; o++) {
+          await AnswerOption.create(toSnake({
+            questionId: String(question._id),
+            optionText: `Opsi ${o + 1}`,
+            isCorrect: o === correctIndex,
+          }));
+          optionCount++;
         }
-
-        answers.push({
-          attempt_id: attempt._id.toString(),
-          question_id: q._id.toString(),
-          selected_option_id: selectedOption._id.toString(),
-          is_correct: selectedOption._id.toString() === correctOption?._id.toString(),
-        });
       }
 
-      await UserAnswer.insertMany(answers);
-      
-      const score = Math.round((correctCount / questions.length) * 100);
-      await QuizAttempt.findByIdAndUpdate(attempt._id, {
-        score,
-        submitted_at: new Date(),
-      });
-      
-      attemptsCreated++;
+      // 2 essay
+      for (let q = 0; q < 2; q++) {
+        await Question.create(toSnake({
+          quizId: String(quiz._id),
+          questionText: `Soal essay ${q + 1} untuk ${quiz.title}`,
+          type: "essay",
+          points: 20,
+          order: q + 3,
+          // half with key, half without key
+          answerKeyText: q % 2 === 0 ? "jawaban contoh" : "",
+          manualGradingRequired: q % 2 !== 0,
+        }));
+        questionCount++;
+      }
     }
   }
-  console.log(`✅ Created ${attemptsCreated} quiz attempts`);
 
-  console.log("\n🎉 Seed completed successfully!");
-  console.log("\n📊 Summary:");
-  console.log(`   - Users: ${users.length}`);
-  console.log(`   - Modules: ${modules.length}`);
-  console.log(`   - Quizzes: ${quizzes.length}`);
-  console.log(`   - Questions: ${totalQuestions}`);
-  console.log(`   - Options: ${totalOptions}`);
-  console.log(`   - Attempts: ${attemptsCreated}`);
-  console.log("\n🔐 Login credentials:");
-  console.log(`   - Admin: admin@madrasah.com / admin123`);
-  console.log(`   - User: ahmad.hidayat@madrasah.com / user123`);
+  // enrollments: each student at least 1 module
+  let enrollmentCount = 0;
+  for (const st of students) {
+    const modulePool = [...modules].sort(() => Math.random() - 0.5);
+    const take = randomInt(1, modules.length);
+    for (let i = 0; i < take; i++) {
+      await Enrollment.updateOne(
+        { moduleId: modulePool[i]._id, userId: st._id },
+        {
+          $set: {
+            moduleId: modulePool[i]._id,
+            userId: st._id,
+            enrolledBy: admin._id,
+            status: "active",
+            enrolledAt: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+      enrollmentCount++;
+    }
+  }
+
+  // attempts + answers (10-15)
+  const attemptsTarget = randomInt(10, 15);
+  let attemptCount = 0;
+  let answerCount = 0;
+
+  for (let i = 0; i < attemptsTarget; i++) {
+    const st = pick(students);
+    const qz = pick(quizzes);
+    const statusCycle = i % 3; // 0 inProgress, 1 submitted, 2 graded
+
+    const startedAt = new Date(Date.now() - randomInt(1, 14) * 86400000);
+    const submittedAt = statusCycle === 0 ? null : new Date(startedAt.getTime() + randomInt(15, 45) * 60000);
+
+    const attempt = await QuizAttempt.create(toSnake({
+      userId: String(st._id),
+      quizId: String(qz._id),
+      startedAt,
+      submittedAt,
+      totalScore: submittedAt ? randomInt(45, 98) : null,
+      status: statusCycle === 0 ? "in_progress" : statusCycle === 1 ? "submitted" : "graded",
+    }));
+    attemptCount++;
+
+    const quizQuestions = await Question.find(toSnake({ quizId: String(qz._id) })).lean();
+    for (const qq of quizQuestions) {
+      const isEssay = String((qq as any).type || (qq as any).question_type || "multiple_choice") === "essay";
+      let selectedOptionId = "";
+      let isCorrect = false;
+      let awardedPoints = 0;
+      let reviewStatus: "pending" | "auto_graded" | "manual_graded" = "auto_graded";
+      let answerText = "";
+
+      if (isEssay) {
+        answerText = "jawaban siswa";
+        const key = String((qq as any).answer_key_text || "").trim().toLowerCase();
+        if (!key) {
+          reviewStatus = "pending";
+          awardedPoints = 0;
+        } else {
+          isCorrect = Math.random() > 0.4;
+          awardedPoints = isCorrect ? Number((qq as any).points || 10) : 0;
+          if (statusCycle === 2) reviewStatus = "manual_graded";
+        }
+      } else {
+        const options = await AnswerOption.find(toSnake({ questionId: String((qq as any)._id) })).lean();
+        const chosen = pick(options);
+        selectedOptionId = String((chosen as any)._id);
+        const isCorrectKey = Object.keys(toSnake({ isCorrect: true }))[0];
+        isCorrect = !!(chosen as any)[isCorrectKey];
+        awardedPoints = isCorrect ? Number((qq as any).points || 10) : 0;
+      }
+
+      await UserAnswer.create(toSnake({
+        attemptId: String(attempt._id),
+        questionId: String((qq as any)._id),
+        selectedOptionId: selectedOptionId || "essay-answer",
+        answerText,
+        isCorrect,
+        awardedPoints,
+        reviewStatus,
+        gradedBy: statusCycle === 2 ? String(admin._id) : undefined,
+        gradedAt: statusCycle === 2 ? new Date() : undefined,
+      }));
+      answerCount++;
+    }
+  }
+
+  // relation consistency check
+  const moduleIdKey = Object.keys(toSnake({ moduleId: "x" }))[0];
+  const quizModuleInvalid = await Quiz.countDocuments({ [moduleIdKey]: { $nin: modules.map((m) => String(m._id)) } });
+  const phaseModuleInvalid = await Phase.countDocuments({ moduleId: { $nin: modules.map((m) => m._id) } });
+  const materialPhaseIds = phases.map((p) => p._id);
+  const materialPhaseInvalid = await Material.countDocuments({ phaseId: { $nin: materialPhaseIds } });
+  const quizIds = quizzes.map((q) => String(q._id));
+  const quizIdKey = Object.keys(toSnake({ quizId: "x" }))[0];
+  const attemptQuizInvalid = await QuizAttempt.countDocuments({ [quizIdKey]: { $nin: quizIds } });
+  const enrollmentModuleInvalid = await Enrollment.countDocuments({ moduleId: { $nin: modules.map((m) => m._id) } });
+
+  console.log("\n✅ Seed completed");
+  console.log("Users:", 1 + gurus.length + students.length);
+  console.log("Modules:", modules.length);
+  console.log("Phases:", phases.length);
+  console.log("Materials:", materialCount);
+  console.log("Quizzes:", quizzes.length);
+  console.log("Questions:", questionCount);
+  console.log("Options:", optionCount);
+  console.log("Enrollments:", enrollmentCount);
+  console.log("Attempts:", attemptCount);
+  console.log("Answers:", answerCount);
+
+  console.log("\n🔎 Relation Check");
+  console.log({ quizModuleInvalid, phaseModuleInvalid, materialPhaseInvalid, attemptQuizInvalid, enrollmentModuleInvalid });
+
+  console.log("\n🔐 Login");
+  console.log("Admin: admin@madrasah.com / admin123");
+  console.log("Siswa: siswa1@madrasah.local / user123");
 }
 
 seed().catch((err) => {
-  console.error("❌ Seed failed:", err);
+  console.error("❌ Seed failed", err);
   process.exit(1);
 });
