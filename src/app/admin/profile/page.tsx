@@ -1,9 +1,16 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState, useRef } from "react";
 import { apiFetch } from "@/lib/client/api";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { DashboardCard } from "@/components/ui/DashboardCard";
+
+type AdminProfile = {
+  name?: string;
+  email?: string;
+  profile_url?: string;
+};
 
 export default function AdminProfilePage() {
   const [form, setForm] = useState({ name: "", email: "", profile_url: "" });
@@ -15,11 +22,13 @@ export default function AdminProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
-    const user = await apiFetch<any>("/api/admin/profile");
+    const user = await apiFetch<AdminProfile>("/api/admin/profile");
     setForm({ name: user?.name || "", email: user?.email || "", profile_url: user?.profile_url || "" });
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    void load();
+  }, []);
 
   const showSuccess = (msg: string) => {
     setSuccess(msg);
@@ -99,9 +108,23 @@ export default function AdminProfilePage() {
             <div className="flex items-center gap-5">
               <div className="flex-shrink-0">
                 {imagePreview ? (
-                  <img src={imagePreview} className="h-20 w-20 rounded-full object-cover" alt="Preview" />
+                  <Image
+                    src={imagePreview}
+                    className="h-20 w-20 rounded-full object-cover"
+                    alt="Preview"
+                    width={80}
+                    height={80}
+                    unoptimized
+                  />
                 ) : form.profile_url ? (
-                  <img src={form.profile_url} alt={form.name} className="h-20 w-20 rounded-full object-cover" />
+                  <Image
+                    src={form.profile_url}
+                    alt={form.name}
+                    className="h-20 w-20 rounded-full object-cover"
+                    width={80}
+                    height={80}
+                    unoptimized
+                  />
                 ) : (
                   <div className="h-20 w-20 rounded-full bg-emerald-100 flex items-center justify-center">
                     <span className="text-xl font-semibold text-emerald-600">

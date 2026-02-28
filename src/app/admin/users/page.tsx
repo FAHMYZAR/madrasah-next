@@ -15,8 +15,10 @@ export default function AdminUsersPage() {
   const [form, setForm] = useState({ nim: "", name: "", className: "", password: "", role: "user" as "admin" | "guru" | "user", isActive: true });
   const [profile, setProfile] = useState<File | null>(null);
   const [editing, setEditing] = useState<User | null>(null);
+  const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState("");
+  const [error, setError] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("");
   const [mobileMenuUser, setMobileMenuUser] = useState<User | null>(null);
 
@@ -27,38 +29,88 @@ export default function AdminUsersPage() {
     setUsers(res.data);
     setMeta(res.meta);
   };
-  useEffect(() => { load(1); }, []);
-  useEffect(() => { load(1, roleFilter); }, [roleFilter]);
+  useEffect(() => {
+    load(1);
+  }, []);
+  useEffect(() => {
+    load(1, roleFilter);
+  }, [roleFilter]);
 
-  const showSuccess = (msg: string) => { setSuccess(msg); setTimeout(() => setSuccess(""), 2500); };
+  const showSuccess = (msg: string) => {
+    setError("");
+    setSuccess(msg);
+    setTimeout(() => setSuccess(""), 2500);
+  };
 
-  const create = async () => {
-    if (!form.name || !form.nim || !form.password) return;
-    setLoading(true);
-    const fd = new FormData();
-    fd.append("name", form.name);
-    fd.append("nim", form.nim);
-    fd.append("password", form.password);
-    fd.append("role", form.role);
-    fd.append("className", form.className);
-    fd.append("isActive", String(form.isActive));
-    if (profile) fd.append("profile_url", profile);
-    await fetch("/api/admin/users", { method: "POST", body: fd, credentials: "include" });
+  const showError = (msg: string) => {
+    setSuccess("");
+    setError(msg);
+    setTimeout(() => setError(""), 3000);
+  };
+
+  const resetForm = () => {
     setForm({ nim: "", name: "", className: "", password: "", role: "user", isActive: true });
     setProfile(null);
-    await load();
-    setLoading(false);
-    showSuccess("User created successfully!");
+    setEditing(null);
+  };
+
+  const openCreate = () => {
+    resetForm();
+    setShowForm(true);
+  };
+
+  const openEdit = (u: User) => {
+    setEditing(u);
+    setShowForm(true);
+  };
+
+  const closeForm = () => {
+    if (loading) return;
+    setShowForm(false);
+    resetForm();
+  };
+
+  const create = async () => {
+    if (!form.name || !form.nim || !form.password) {
+      showError("Name, NIM, dan password wajib diisi");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append("name", form.name);
+      fd.append("nim", form.nim);
+      fd.append("password", form.password);
+      fd.append("role", form.role);
+      fd.append("className", form.className);
+      fd.append("isActive", String(form.isActive));
+      if (profile) fd.append("profile_url", profile);
+
+      await apiFetch("/api/admin/users", { method: "POST", body: fd as any });
+      await load();
+      closeForm();
+      showSuccess("User created successfully!");
+    } catch (e: any) {
+      showError(e?.message || "Gagal menambah user");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const update = async () => {
     if (!editing) return;
     setLoading(true);
-    await apiFetch(`/api/admin/users/${editing._id}`, { method: "PATCH", body: JSON.stringify({ name: editing.name, nim: editing.nim, role: editing.role, className: editing.className, isActive: editing.isActive }) });
-    setEditing(null);
-    await load();
-    setLoading(false);
-    showSuccess("User updated successfully!");
+    try {
+      await apiFetch(`/api/admin/users/${editing._id}`, { method: "PATCH", body: JSON.stringify({ name: editing.name, nim: editing.nim, role: editing.role, className: editing.className, isActive: editing.isActive }) });
+      await load();
+      closeForm();
+      showSuccess("User updated successfully!");
+    } catch (e: any) {
+      showError(e?.message || "Gagal update user");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const deactivate = async (id: string, val: boolean) => {
@@ -76,9 +128,8 @@ export default function AdminUsersPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
-      {success && (
-        <div className="bg-emerald-50 border-l-4 border-emerald-500 rounded-lg p-3 text-sm text-emerald-800">{success}</div>
-      )}
+      {success && <div className="bg-emerald-50 border-l-4 border-emerald-500 rounded-lg p-3 text-sm text-emerald-800">{success}</div>}
+      {error && <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-3 text-sm text-red-800">{error}</div>}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -93,16 +144,61 @@ export default function AdminUsersPage() {
               <option value="guru">Guru</option>
               <option value="user">User</option>
             </select>
-            <PrimaryButton onClick={() => { if (editing) { setEditing(null); } else { setForm({ ...form }); setProfile(null); } }} icon={(editing || form.name) ? "times" : "plus"}>
-              {(editing || form.name) ? "Close" : "Add User"}
-            </PrimaryButton>
+            <PrimaryButton onClick={openCreate} icon="plus">Add User</PrimaryButton>
           </div>
         </div>
 
-        {(editing || form.name || form.nim) && (
-          <div className="px-5 py-4 border-b border-gray-200 bg-gray-50">
-            <h2 className="text-base font-semibold text-gray-900 mb-3">{editing ? "Edit User" : "Add User"}</h2>
-            <form className="space-y-4">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">User</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Role</th>
+                <th className="hidden md:table-cell px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Class</th>
+                <th className="hidden md:table-cell px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Others</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 bg-white">
+              {users.length === 0 ? (
+                <tr key="empty-users"><td colSpan={5}><EmptyState icon="users" title="No users" description="Tambah user" /></td></tr>
+              ) : users.map((u) => (
+                <tr key={u._id} className="hover:bg-gray-50">
+                  <td className="px-5 py-4">
+                    <div className="flex flex-col">
+                      <span className="text-sm font-semibold text-gray-900">{u.name}</span>
+                      <span className="text-xs text-gray-500">NIM: {u.nim}</span>
+                    </div>
+                  </td>
+                  <td className="px-5 py-4"><Badge variant={u.role === "admin" ? "danger" : u.role === "guru" ? "info" : "neutral"}>{u.role}</Badge></td>
+                  <td className="hidden md:table-cell px-5 py-4 text-sm text-gray-600">{u.className || "-"}</td>
+                  <td className="hidden md:table-cell px-5 py-4">{u.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="neutral">Inactive</Badge>}</td>
+                  <td className="px-5 py-4 text-right">
+                    <div className="hidden md:inline-flex items-center gap-2">
+                      <button onClick={() => openEdit(u)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded"><i className="fas fa-edit" /></button>
+                      <button onClick={() => deactivate(u._id, !u.isActive)} className="p-2 text-amber-600 hover:bg-amber-50 rounded" title="Toggle active"><i className="fas fa-power-off" /></button>
+                      <button onClick={() => remove(u._id)} className="p-2 text-red-600 hover:bg-red-50 rounded"><i className="fas fa-trash" /></button>
+                    </div>
+                    <button onClick={() => setMobileMenuUser(u)} className="md:hidden p-2 text-gray-600 hover:bg-gray-100 rounded" title="Others">
+                      <i className="fas fa-ellipsis-v" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={closeForm} />
+          <div className="relative z-10 w-full max-w-2xl bg-white rounded-2xl border border-gray-200 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-900">{editing ? "Edit User" : "Add User"}</h2>
+              <button onClick={closeForm} className="text-gray-500"><i className="fas fa-times" /></button>
+            </div>
+            <div className="p-5 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">NIM</label>
@@ -136,8 +232,8 @@ export default function AdminUsersPage() {
               {!editing && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Password (untuk admin/guru)</label>
-                    <input className="input-base" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Password" />
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+                    <input className="input-base" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Password minimal 6 karakter" />
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Profile Picture</label>
@@ -147,56 +243,15 @@ export default function AdminUsersPage() {
               )}
 
               <div className="flex flex-col sm:flex-row justify-end gap-3">
-                {editing && <PrimaryButton type="button" variant="secondary" onClick={() => setEditing(null)}>Cancel</PrimaryButton>}
+                <PrimaryButton type="button" variant="secondary" onClick={closeForm}>Cancel</PrimaryButton>
                 <PrimaryButton type="button" onClick={editing ? update : create} loading={loading}>
                   {loading ? "Saving..." : (editing ? "Update User" : "Create User")}
                 </PrimaryButton>
               </div>
-            </form>
+            </div>
           </div>
-        )}
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">User</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Role</th>
-                <th className="hidden md:table-cell px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Class</th>
-                <th className="hidden md:table-cell px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Others</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
-              {users.length === 0 ? (
-                <tr key="empty-users"><td colSpan={5}><EmptyState icon="users" title="No users" description="Tambah user" /></td></tr>
-              ) : users.map((u) => (
-                <tr key={u._id} className="hover:bg-gray-50">
-                  <td className="px-5 py-4">
-                    <div className="flex flex-col">
-                      <span className="text-sm font-semibold text-gray-900">{u.name}</span>
-                      <span className="text-xs text-gray-500">NIM: {u.nim}</span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4"><Badge variant={u.role === "admin" ? "danger" : u.role === "guru" ? "info" : "neutral"}>{u.role}</Badge></td>
-                  <td className="hidden md:table-cell px-5 py-4 text-sm text-gray-600">{u.className || "-"}</td>
-                  <td className="hidden md:table-cell px-5 py-4">{u.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="neutral">Inactive</Badge>}</td>
-                  <td className="px-5 py-4 text-right">
-                    <div className="hidden md:inline-flex items-center gap-2">
-                      <button onClick={() => setEditing(u)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded"><i className="fas fa-edit" /></button>
-                      <button onClick={() => deactivate(u._id, !u.isActive)} className="p-2 text-amber-600 hover:bg-amber-50 rounded" title="Toggle active"><i className="fas fa-power-off" /></button>
-                      <button onClick={() => remove(u._id)} className="p-2 text-red-600 hover:bg-red-50 rounded"><i className="fas fa-trash" /></button>
-                    </div>
-                    <button onClick={() => setMobileMenuUser(u)} className="md:hidden p-2 text-gray-600 hover:bg-gray-100 rounded" title="Others">
-                      <i className="fas fa-ellipsis-v" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
-      </div>
+      )}
 
       {mobileMenuUser && (
         <div className="md:hidden fixed inset-0 z-50">
@@ -217,7 +272,7 @@ export default function AdminUsersPage() {
             </div>
 
             <div className="space-y-2">
-              <button onClick={() => { setEditing(mobileMenuUser); setMobileMenuUser(null); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700">
+              <button onClick={() => { openEdit(mobileMenuUser); setMobileMenuUser(null); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700">
                 <i className="fas fa-edit" /> Edit User
               </button>
               <button onClick={() => { deactivate(mobileMenuUser._id, !mobileMenuUser.isActive); setMobileMenuUser(null); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 text-amber-700">
